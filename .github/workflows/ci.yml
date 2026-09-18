@@ -1,0 +1,38 @@
+name: Test and build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pyinstaller pytest
+
+      - name: Run tests
+        run: python -m pytest test_core.py test_ui.py -q
+
+      - name: Build EXE
+        run: >-
+          python -m PyInstaller --noconfirm --clean --onefile --windowed
+          --additional-hooks-dir "." --name "成绩单PDF拆分工具"
+          --icon "app.ico" --add-data "app.ico;." app.py
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: transcript-splitter-windows
+          path: dist/成绩单PDF拆分工具.exe
