@@ -23,7 +23,19 @@ jobs:
         run: python -m pip install -r requirements.txt pyinstaller pytest
 
       - name: Run tests
-        run: python -m pytest test_core.py test_ui.py -q
+        # Isolate each GUI test: repeatedly creating/destroying Tk roots in one
+        # Windows process can intermittently break Tcl/Tk library initialization.
+        run: |
+          python -m pytest test_core.py -q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $uiTests = python -m pytest test_ui.py --collect-only -q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($nodeId in $uiTests) {
+            if ($nodeId -match '^test_ui\.py::') {
+              python -m pytest $nodeId -q
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+          }
 
       - name: Build EXE
         run: >-

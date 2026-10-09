@@ -168,12 +168,12 @@ def test_output_and_repeated_split(app, tmp_path):
     prepare(app, tmp_path)
     assert "校验通过" in app.summary_var.get()
     assert app.tree.winfo_height() > 300
-    app.filename_prefix_var.set("测试-")
+    app.fixed_number_var.set("061")
     assert not app.plan_is_stale
     app.perform_split()
     first = app.last_output_dir
     assert len(list(first.glob("*.pdf"))) == 24
-    assert len(PdfReader(first / "测试-学生1.pdf").pages) == 2
+    assert len(PdfReader(first / "061-01-学生1.pdf").pages) == 2
     app.perform_split()
     assert app.last_output_dir != first
     assert first.exists()
@@ -183,6 +183,46 @@ def test_output_and_repeated_split(app, tmp_path):
     assert app.split_button.instate(["disabled"])
 
 
+def test_naming_preview_validation_and_directory_export(app, tmp_path):
+    prepare(app, tmp_path, 3)
+    app.fixed_number_var.set("061")
+    app.start_number_var.set("5")
+    app.sequence_digits_var.set("3")
+    app.export_directory_var.set(True)
+    app.directory_number_var.set("2")
+    assert not app.plan_is_stale
+    assert "061-002-目录.pdf" in app.filename_preview_var.get()
+    assert "061-005-学生1.pdf" in app.filename_preview_var.get()
+    assert "061-007-学生3.pdf" in app.filename_preview_var.get()
+    app.perform_split()
+    assert len(list(app.last_output_dir.glob("*.pdf"))) == 4
+    assert len(PdfReader(app.last_output_dir / "061-002-目录.pdf").pages) == 1
+    assert app.result_var.get() == "已生成 4 个 PDF"
+    for variable, bad_value in [(app.start_number_var, "-1"), (app.sequence_digits_var, "0"),
+                                (app.fixed_number_var, "bad/path"), (app.directory_number_var, "")]:
+        previous = variable.get()
+        variable.set(bad_value)
+        assert app.split_button.instate(["disabled"])
+        assert not app.plan_is_stale
+        variable.set(previous)
+        assert not app.split_button.instate(["disabled"])
+    app.export_directory_var.set(False)
+    app.directory_number_var.set("")
+    assert not app.split_button.instate(["disabled"])
+    assert "目录.pdf" not in app.filename_preview_var.get()
+
+
+def test_duplicate_names_are_separate_numbered_files(app, tmp_path):
+    prepare(app, tmp_path, 2)
+    app.names_text.delete("1.0", "end")
+    app.names_text.insert("1.0", "张盼\n张盼")
+    app.update()
+    app.generate_plan()
+    app.fixed_number_var.set("061")
+    app.perform_split()
+    assert sorted(file.name for file in app.last_output_dir.glob("*.pdf")) == ["061-01-张盼.pdf", "061-02-张盼.pdf"]
+
+
 @pytest.mark.parametrize("scaling", [1.3333, 1.6667, 2.0])
 def test_layout_scaling(app, scaling):
     app.tk.call("tk", "scaling", scaling)
@@ -190,6 +230,9 @@ def test_layout_scaling(app, scaling):
     app.update()
     assert app.tree.winfo_height() > 300
     assert app.split_button.winfo_rootx() + app.split_button.winfo_width() <= app.winfo_rootx() + app.winfo_width()
-    app.state("zoomed")
+    if app.tk.call("tk", "windowingsystem") == "win32":
+        app.state("zoomed")
+    else:
+        app.geometry("1280x900")
     app.update()
     assert app.tree.winfo_height() > 300
