@@ -111,12 +111,12 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
             highlightbackground=BG,
         )
         self.drop_border.pack(fill="both", expand=True)
-        root = ttk.Frame(self.drop_border, padding=14)
+        root = ttk.Frame(self.drop_border, padding=12)
         root.pack(fill="both", expand=True)
         root.columnconfigure(0, weight=1)
         root.rowconfigure(1, weight=1)
-        settings = ttk.Frame(root, style="Card.TFrame", padding=12)
-        settings.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        settings = ttk.Frame(root, style="Card.TFrame", padding=8)
+        settings.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         settings.columnconfigure(1, weight=1)
         ttk.Label(settings, text="PDF 文件", style="Card.TLabel").grid(row=0, column=0, padx=(0, 10))
         self.pdf_entry = ttk.Entry(settings, textvariable=self.pdf_display_var, state="readonly", foreground=MUTED, width=12)
@@ -126,7 +126,7 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
         ttk.Button(file_actions, text="选择文件", command=self.choose_pdf).pack(side="left")
         ttk.Label(file_actions, text="支持拖入 PDF", style="Muted.TLabel").pack(side="left", padx=(10, 0))
         rules = ttk.Frame(settings, style="Card.TFrame")
-        rules.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(12, 0))
+        rules.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         rules.columnconfigure(5, weight=1)
         for column, title, variable, minimum in (
             (0, "目录页数", self.directory_pages_var, 0),
@@ -142,7 +142,7 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
         self.directory_number_entry.pack(side="left")
 
         naming = ttk.Frame(settings, style="Card.TFrame")
-        naming.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        naming.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         naming.columnconfigure(5, weight=1)
         for column, title, variable, width in (
             (0, "固定编号", self.fixed_number_var, 10),
@@ -155,7 +155,7 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
                                                  values=("自动", "2", "3", "4"), width=6)
         self.sequence_digits_entry.grid(row=0, column=5, sticky="w")
         self.filename_preview_label = ttk.Label(settings, textvariable=self.filename_preview_var, style="Muted.TLabel")
-        self.filename_preview_label.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        self.filename_preview_label.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(4, 0))
         settings.bind("<Configure>", lambda event: self.filename_preview_label.configure(wraplength=max(100, event.width - 24)))
 
         self.panes = ttk.Panedwindow(root, orient="horizontal")
@@ -168,7 +168,7 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
             box.columnconfigure(0, weight=1)
             box.rowconfigure(1, weight=1)
         header = ttk.Frame(names_box, style="Card.TFrame")
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         ttk.Label(header, text="输入姓名", style="Heading.TLabel").pack(side="left")
         ttk.Label(header, textvariable=self.count_var, style="Muted.TLabel").pack(side="right")
         self.names_border = names_area = tk.Frame(
@@ -208,7 +208,7 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
         ttk.Button(names_box, text="生成方案", command=self.generate_plan).grid(row=2, column=0, sticky="ew", pady=(12, 0))
 
         header = ttk.Frame(plan_box, style="Card.TFrame")
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         ttk.Label(header, text="检查方案", style="Heading.TLabel").pack(side="left")
         ttk.Label(header, textvariable=self.plan_state_var, style="Muted.TLabel").pack(side="right")
         table = ttk.Frame(plan_box, style="Card.TFrame")
@@ -238,7 +238,7 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
         self.tree.bind("<<TreeviewSelect>>", lambda _: self.schedule_cell_redraw())
         self.tree.bind("<Configure>", lambda _: self.schedule_cell_redraw())
         actions = ttk.Frame(plan_box, style="Card.TFrame")
-        actions.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        actions.grid(row=2, column=0, sticky="ew", pady=(8, 0))
         ttk.Label(actions, text="页数", style="Muted.TLabel").pack(side="left", padx=(0, 8))
         self.quick_buttons = []
         for pages in (2, 3, 4):
@@ -250,7 +250,7 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
         self.edit_error.grid_remove()
 
         bottom = ttk.Frame(root)
-        bottom.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        bottom.grid(row=2, column=0, sticky="ew", pady=(8, 0))
         bottom.columnconfigure(0, weight=1)
         self.summary_label = ttk.Label(bottom, textvariable=self.summary_var)
         self.summary_label.grid(row=0, column=0, sticky="w")
