@@ -10,8 +10,8 @@ from tkinter import filedialog, font as tkfont, messagebox, ttk
 
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
-from core import (PersonPlan, SplitterError, build_plan, get_pdf_page_count,
-                  page_difference, parse_names, recalculate_ranges, split_pdf)
+from core import (OutputNaming, PersonPlan, SplitterError, build_plan, get_pdf_page_count,
+                  page_difference, parse_names, planned_filenames, recalculate_ranges, split_pdf)
 
 APP_TITLE = "成绩单 PDF 拆分工具"
 BG, WHITE, STRIPE = "#f3f5f9", "#ffffff", "#f3f6fb"
@@ -42,7 +42,12 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
         self.pdf_display_var = tk.StringVar(value="选择或拖入一个 PDF")
         self.directory_pages_var = tk.IntVar(value=1)
         self.default_pages_var = tk.IntVar(value=2)
-        self.filename_prefix_var = tk.StringVar()
+        self.fixed_number_var = tk.StringVar()
+        self.start_number_var = tk.StringVar(value="1")
+        self.sequence_digits_var = tk.StringVar(value="自动")
+        self.export_directory_var = tk.BooleanVar(value=False)
+        self.directory_number_var = tk.StringVar(value="0")
+        self.filename_preview_var = tk.StringVar()
         self.summary_var = tk.StringVar(value="请选择 PDF · 粘贴姓名")
         self.result_var = tk.StringVar()
         self.count_var = tk.StringVar(value="0 人")
@@ -62,6 +67,10 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
         self._enable_pdf_drop()
         for variable in (self.directory_pages_var, self.default_pages_var):
             variable.trace_add("write", lambda *_: self.mark_plan_stale())
+        for variable in (self.fixed_number_var, self.start_number_var, self.sequence_digits_var,
+                         self.export_directory_var, self.directory_number_var, self.directory_pages_var):
+            variable.trace_add("write", self.update_naming_settings)
+        self.update_naming_settings()
         self.names_text.bind("<<Modified>>", self.on_names_modified)
         self.names_text.bind("<Control-a>", self.select_all_names)
         self.names_text.bind("<Control-A>", self.select_all_names)
@@ -125,8 +134,29 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
         ):
             ttk.Label(rules, text=title, style="Card.TLabel").grid(row=0, column=column, padx=(0, 8))
             ttk.Spinbox(rules, from_=minimum, to=50, width=5, textvariable=variable).grid(row=0, column=column+1, padx=(0, 22))
-        ttk.Label(rules, text="文件名前缀", style="Card.TLabel").grid(row=0, column=4, padx=(0, 8))
-        ttk.Entry(rules, textvariable=self.filename_prefix_var, width=14).grid(row=0, column=5, sticky="ew")
+        directory = ttk.Frame(rules, style="Card.TFrame")
+        directory.grid(row=0, column=4, columnspan=2, sticky="w")
+        ttk.Checkbutton(directory, text="导出目录", variable=self.export_directory_var).pack(side="left", padx=(0, 12))
+        ttk.Label(directory, text="目录编号", style="Card.TLabel").pack(side="left", padx=(0, 8))
+        self.directory_number_entry = ttk.Entry(directory, textvariable=self.directory_number_var, width=6)
+        self.directory_number_entry.pack(side="left")
+
+        naming = ttk.Frame(settings, style="Card.TFrame")
+        naming.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        naming.columnconfigure(5, weight=1)
+        for column, title, variable, width in (
+            (0, "固定编号", self.fixed_number_var, 10),
+            (2, "起始序号", self.start_number_var, 6),
+        ):
+            ttk.Label(naming, text=title, style="Card.TLabel").grid(row=0, column=column, padx=(0, 8))
+            ttk.Entry(naming, textvariable=variable, width=width).grid(row=0, column=column + 1, padx=(0, 22))
+        ttk.Label(naming, text="序号位数", style="Card.TLabel").grid(row=0, column=4, padx=(0, 8))
+        self.sequence_digits_entry = ttk.Combobox(naming, textvariable=self.sequence_digits_var,
+                                                 values=("自动", "2", "3", "4"), width=6)
+        self.sequence_digits_entry.grid(row=0, column=5, sticky="w")
+        self.filename_preview_label = ttk.Label(settings, textvariable=self.filename_preview_var, style="Muted.TLabel")
+        self.filename_preview_label.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        settings.bind("<Configure>", lambda event: self.filename_preview_label.configure(wraplength=max(100, event.width - 24)))
 
         self.panes = ttk.Panedwindow(root, orient="horizontal")
         self.panes.grid(row=1, column=0, sticky="nsew")
@@ -245,6 +275,47 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
         self.pdf_display_var.set(path or "选择或拖入一个 PDF")
         self.pdf_entry.configure(foreground=INK if path else MUTED)
 
+    def read_naming(self) -> OutputNaming:
+        def nonnegative_number(raw: str, title: str) -> int:
+            value = raw.strip()
+            if not value.isascii() or not value.isdecimal():
+                raise SplitterError(f"{title}必须是大于或等于 0 的整数。")
+            return int(value)
+
+        digits = self.sequence_digits_var.get().strip()
+        export_directory = self.export_directory_var.get() and self.directory_pages_var.get() > 0
+        return OutputNaming(
+            fixed_number=self.fixed_number_var.get().strip(),
+            start_number=nonnegative_number(self.start_number_var.get(), "起始序号"),
+            sequence_digits=None if digits == "自动" else nonnegative_number(digits, "序号位数"),
+            export_directory=export_directory,
+            directory_number=nonnegative_number(self.directory_number_var.get(), "目录编号") if export_directory else 0,
+        )
+
+    def update_naming_preview(self) -> str | None:
+        try:
+            directory_pages = self.directory_pages_var.get()
+            naming = self.read_naming()
+            sample_plan = self.plan if self.plan and not self.plan_is_stale else [PersonPlan("姓名")]
+            filenames = planned_filenames(sample_plan, directory_pages, naming)
+            examples = filenames if len(filenames) <= 2 else [filenames[0], filenames[1], "…", filenames[-1]]
+            self.filename_preview_var.set("文件名预览：" + " · ".join(examples))
+            return None
+        except (ValueError, tk.TclError, SplitterError) as exc:
+            error = str(exc) if isinstance(exc, SplitterError) else "请填写有效的目录页数和编号。"
+            self.filename_preview_var.set(error)
+            return error
+
+    def update_naming_settings(self, *_args: object) -> None:
+        try:
+            enabled = self.export_directory_var.get() and self.directory_pages_var.get() > 0
+        except tk.TclError:
+            enabled = False
+        self.directory_number_entry.configure(state="normal" if enabled else "disabled")
+        self.result_var.set("")
+        self.update_naming_preview()
+        self.update_integrity_status()
+
     def focus_names_input(self, _event: tk.Event | None = None) -> str:
         self.names_placeholder.place_forget()
         self.names_text.focus_set()
@@ -351,6 +422,7 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
         self.split_button.configure(state="disabled")
         self.set_editing_enabled(False)
         self.result_var.set("")
+        self.update_naming_preview()
         if self.plan:
             self.plan_state_var.set("待重新生成")
             self.summary_var.set("输入已修改 · 请重新生成方案")
@@ -388,7 +460,7 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
             if not path:
                 raise SplitterError("请先选择 PDF 文件。")
             total = get_pdf_page_count(path)
-            plan = build_plan(parse_names(self.names_text.get("1.0", "end")), int(self.directory_pages_var.get()), int(self.default_pages_var.get()))
+            plan = build_plan(parse_names(self.names_text.get("1.0", "end")), int(self.directory_pages_var.get()), int(self.default_pages_var.get()), allow_duplicate_names=True)
             self.pdf_total_pages, self.plan = total, plan
             self.plan_is_stale = False
             self.plan_state_var.set("")
@@ -527,22 +599,28 @@ class TranscriptSplitterApp(TkinterDnD.Tk):
         self.update_integrity_status()
 
     def update_integrity_status(self) -> None:
+        naming_error = self.update_naming_preview()
         if not self.plan or self.pdf_total_pages is None or self.plan_is_stale:
             self.split_button.configure(state="disabled")
             return
         diff = page_difference(self.plan, int(self.directory_pages_var.get()), self.pdf_total_pages)
         status = "校验通过" if diff == 0 else (f"剩余 {diff} 页" if diff > 0 else f"超出 {-diff} 页")
+        if diff == 0 and naming_error:
+            status = "请修正命名设置"
         self.summary_var.set(f"{len(self.plan)} 人 · {self.pdf_total_pages} 页 · {status}")
-        self.summary_label.configure(foreground="#16805d" if diff == 0 else "#a15c00")
-        self.split_button.configure(state="normal" if diff == 0 else "disabled")
+        valid = diff == 0 and naming_error is None
+        self.summary_label.configure(foreground="#16805d" if valid else "#a15c00")
+        self.split_button.configure(state="normal" if valid else "disabled")
 
     def perform_split(self) -> None:
         if self.plan_is_stale or not self.commit_page_edit():
             return
         try:
-            output = split_pdf(self.pdf_path_var.get().strip(), self.plan, int(self.directory_pages_var.get()), filename_prefix=self.filename_prefix_var.get())
+            naming = self.read_naming()
+            directory_pages = int(self.directory_pages_var.get())
+            output = split_pdf(self.pdf_path_var.get().strip(), self.plan, directory_pages, naming=naming)
             self.last_output_dir = output
-            self.result_var.set(f"已生成 {len(self.plan)} 个 PDF")
+            self.result_var.set(f"已生成 {len(planned_filenames(self.plan, directory_pages, naming))} 个 PDF")
             self.open_button.configure(state="normal")
         except (ValueError, tk.TclError):
             messagebox.showerror("输入错误", "目录页数必须是整数。")
